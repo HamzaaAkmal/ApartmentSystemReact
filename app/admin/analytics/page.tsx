@@ -21,15 +21,17 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import AdminRouteGuard from '../../../components/auth/AdminRouteGuard'; // Corrected path
 
 export default function AnalyticsDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-100 md:flex-row">
-      {/* Mobile sidebar toggle */}
-      <Button
+    <AdminRouteGuard>
+      <div className="flex min-h-screen flex-col bg-gray-100 md:flex-row">
+        {/* Mobile sidebar toggle */}
+        <Button
         variant="ghost"
         size="icon"
         className="absolute left-4 top-4 z-50 md:hidden"
@@ -605,6 +607,7 @@ export default function AnalyticsDashboard() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+      </div>
+    </AdminRouteGuard>
   )
 }

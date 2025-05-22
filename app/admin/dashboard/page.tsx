@@ -1,886 +1,281 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import Image from "next/image"
-import {
-  BarChart3,
-  Building,
-  CreditCard,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  MessageSquare,
-  Settings,
-  Users,
-  X,
-  Eye,
-  Edit,
-  Trash2,
-  Phone,
-  Plus,
-} from "lucide-react"
+import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import Image from "next/image";
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AdBannerCarousel } from "@/components/ad-banner"
-import { SearchBar } from "@/components/search-bar"
-import { CurrencySelector } from "@/components/currency-selector"
-import { ClientDialog } from "@/components/dialogs/client-dialog"
-import { ApartmentDialog } from "@/components/dialogs/apartment-dialog"
-import { PaymentDialog } from "@/components/dialogs/payment-dialog"
-import { TransactionDialog } from "@/components/dialogs/transaction-dialog"
-import { ConfirmDialog } from "@/components/dialogs/confirm-dialog"
-import { ViewClientDialog } from "@/components/dialogs/view-client-dialog"
-import { ViewApartmentDialog } from "@/components/dialogs/view-apartment-dialog"
-import { useCrud } from "@/lib/hooks/use-crud"
-import { useAccounts } from "@/lib/hooks/use-accounts"
+// Custom Hooks
+import { useAuth } from "../../../context/AuthContext"; 
+import { useCrud as useClientCrud } from "@/lib/hooks/use-crud"; 
+import { useFinance } from "@/lib/hooks/use-finance"; 
+import { usePayments } from "@/lib/hooks/use-payments";
+import { useApartments } from "@/lib/hooks/use-apartments"; 
+import { useBuildings } from "@/lib/hooks/use-buildings"; 
+
+// Types
+import type { 
+  Account, FinancialTransaction, Client, Apartment, Payment, Currency, 
+  Building as BuildingType
+} from "@/lib/types";
+
+// UI Components
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SearchBar } from "@/components/search-bar";
+import { ClientDialog } from "@/components/dialogs/client-dialog";
+import { ApartmentDialog } from "@/components/dialogs/apartment-dialog";
+import { PaymentDialog } from "@/components/dialogs/payment-dialog";
+import { TransactionDialog } from "@/components/dialogs/transaction-dialog";
+import { ConfirmDialog } from "@/components/dialogs/confirm-dialog";
+import { ViewClientDialog } from "@/components/dialogs/view-client-dialog";
+import { ViewApartmentDialog } from "@/components/dialogs/view-apartment-dialog";
+import { AdBannerCarousel } from "@/components/ad-banner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+// Icons
 import {
-  getAllBuildings,
-  getAllApartments,
-  getAllClients,
-  getAllPayments,
-  formatCurrency,
-  systemSettings,
-} from "@/lib/data"
-import type { Client, Apartment, Payment, Currency } from "@/lib/types"
+  BarChart3, Building, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, Settings, Users, X, Eye, Edit, Trash2, Phone, Plus, DollarSign, TrendingUp, TrendingDown, ListFilter, Repeat, Loader2, AlertTriangle, Briefcase, CalendarDays, ListChecks
+} from "lucide-react";
+
+// Helpers (formatCurrency, systemSettings might still be used from here)
+import { formatCurrency, systemSettings } from "@/lib/data";
+import AdminRouteGuard from '@/components/auth/AdminRouteGuard'; // Added
+
+// Constants
+const CONSTRUCTION_ACCOUNT_ID = "construction_main_usd";
+const CLIENT_FINANCE_ACCOUNT_ID = "client_finance_usd";
+const DEFAULT_CURRENCY: Currency = "USD";
 
 export default function AdminDashboard() {
-  // State for UI
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [currency, setCurrency] = useState<Currency>(systemSettings.defaultCurrency)
-  const [searchQuery, setSearchQuery] = useState("")
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { logout, currentUser } = useAuth();
 
-  // CRUD hooks for data management
-  const clientsCrud = useCrud<Client>(getAllClients())
-  const apartmentsCrud = useCrud<Apartment>(getAllApartments())
-  const paymentsCrud = useCrud<Payment>(getAllPayments())
+  // Data Hooks
+  const { items: clients, loading: clientsLoading, error: clientsError, create: createClient, update: updateClient, remove: removeClient } = useClientCrud();
+  const { apartments, loading: apartmentsLoading, error: apartmentsError, createApartment, updateApartment, deleteApartment } = useApartments();
+  const { buildings, loading: buildingsLoading, error: buildingsError } = useBuildings();
+  const { payments, loading: paymentsLoading, error: paymentsError, createPayment: createPaymentDoc, updatePayment: updatePaymentDoc, deletePayment: deletePaymentDoc } = usePayments();
+  const { accounts, transactionsForSelectedAccount, loadingAccounts, loadingTransactions, errorAccounts, errorTransactions, createAccount, addFinancialTransaction, fetchTransactionsForAccount } = useFinance();
 
-  // Accounts management
-  const accounts = useAccounts(
-    {
-      total: 2500000,
-      used: 1750000,
-      remaining: 750000,
-      currency: currency,
-    },
-    {
-      total: 3250000,
-      used: 2300000,
-      remaining: 950000,
-      currency: currency,
-    },
-  )
+  // Dialog States
+  const [addClientDialogOpen, setAddClientDialogOpen] = useState(false);
+  const [editClientDialogOpen, setEditClientDialogOpen] = useState(false);
+  const [viewClientDialogOpen, setViewClientDialogOpen] = useState(false);
+  const [deleteClientDialogOpen, setDeleteClientDialogOpen] = useState(false);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [clientToView, setClientToView] = useState<Client | null | undefined>(null);
 
-  // Dialog states
-  const [addClientDialogOpen, setAddClientDialogOpen] = useState(false)
-  const [editClientDialogOpen, setEditClientDialogOpen] = useState(false)
-  const [viewClientDialogOpen, setViewClientDialogOpen] = useState(false)
-  const [deleteClientDialogOpen, setDeleteClientDialogOpen] = useState(false)
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
+  const [addApartmentDialogOpen, setAddApartmentDialogOpen] = useState(false);
+  const [editApartmentDialogOpen, setEditApartmentDialogOpen] = useState(false);
+  const [viewApartmentDialogOpen, setViewApartmentDialogOpen] = useState(false);
+  const [deleteApartmentDialogOpen, setDeleteApartmentDialogOpen] = useState(false);
+  const [selectedApartmentId, setSelectedApartmentId] = useState<string | null>(null);
+  const [apartmentToView, setApartmentToView] = useState<Apartment | null | undefined>(null);
 
-  const [addApartmentDialogOpen, setAddApartmentDialogOpen] = useState(false)
-  const [editApartmentDialogOpen, setEditApartmentDialogOpen] = useState(false)
-  const [viewApartmentDialogOpen, setViewApartmentDialogOpen] = useState(false)
-  const [deleteApartmentDialogOpen, setDeleteApartmentDialogOpen] = useState(false)
-  const [selectedApartmentId, setSelectedApartmentId] = useState<string | null>(null)
+  const [addPaymentDialogOpen, setAddPaymentDialogOpen] = useState(false);
+  
+  const [showTransactionDialog, setShowTransactionDialog] = useState(false);
+  const [transactionDialogAccountId, setTransactionDialogAccountId] = useState<string | null>(null);
+  const [transactionDialogAccountType, setTransactionDialogAccountType] = useState<"construction" | "finance" | undefined>(undefined);
 
-  const [addPaymentDialogOpen, setAddPaymentDialogOpen] = useState(false)
+  // Filtered Data States
+  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
+  const [filteredApartments, setFilteredApartments] = useState<Apartment[]>([]);
+  const [filteredPayments, setFilteredPayments] = useState<Payment[]>([]);
+  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFinanceAccountId, setSelectedFinanceAccountId] = useState<string | null>(CLIENT_FINANCE_ACCOUNT_ID);
 
-  const [addConstructionTransactionDialogOpen, setAddConstructionTransactionDialogOpen] = useState(false)
-  const [addFinanceTransactionDialogOpen, setAddFinanceTransactionDialogOpen] = useState(false)
-
-  // Filtered data states
-  const [filteredClients, setFilteredClients] = useState<Client[]>(clientsCrud.items)
-  const [filteredApartments, setFilteredApartments] = useState<Apartment[]>(apartmentsCrud.items)
-  const [filteredPayments, setFilteredPayments] = useState<Payment[]>(paymentsCrud.items)
-
-  // Update filtered data when source data changes
+  // Auto-create main accounts
+   useEffect(() => {
+    if (!loadingAccounts && accounts) { 
+      const defaultAccounts = [
+        { id: CONSTRUCTION_ACCOUNT_ID, name: "Construction Main (USD)", type: "construction", currency: "USD" as Currency },
+        { id: CLIENT_FINANCE_ACCOUNT_ID, name: "Client Revenue (USD)", type: "client_finance", currency: "USD" as Currency }
+      ];
+      let accountsCreated = false;
+      defaultAccounts.forEach(async (accData) => {
+        const exists = accounts.some(acc => acc.type === accData.type && acc.currency === accData.currency && acc.name === accData.name);
+        if (!exists) {
+          try {
+            console.log(`Attempting to create account: ${accData.name}`);
+            await createAccount({ name: accData.name, type: accData.type, currency: accData.currency });
+            accountsCreated = true;
+          } catch (error) { console.error(`Error auto-creating account ${accData.name}:`, error); }
+        }
+      });
+    }
+  }, [accounts, loadingAccounts, createAccount]);
+  
   useEffect(() => {
-    handleSearch(searchQuery)
-  }, [clientsCrud.items, apartmentsCrud.items, paymentsCrud.items])
+    if (selectedFinanceAccountId) fetchTransactionsForAccount(selectedFinanceAccountId);
+  }, [selectedFinanceAccountId, fetchTransactionsForAccount, accounts]);
 
-  // Handle currency change
-  const handleCurrencyChange = (newCurrency: Currency) => {
-    setCurrency(newCurrency)
-    accounts.changeCurrency(newCurrency)
-  }
+  // Filtering Logic
+  const handleSearch = (query: string) => setSearchQuery(query);
 
-  // Handle search
-  const handleSearch = (query: string) => {
-    setSearchQuery(query)
+  useEffect(() => setFilteredClients(clients), [clients]);
+  useEffect(() => setFilteredApartments(apartments), [apartments]);
+  useEffect(() => setFilteredPayments(payments), [payments]);
 
-    if (query) {
-      // Filter clients
-      const clients = clientsCrud.filter(
-        (client) =>
-          client.name.toLowerCase().includes(query.toLowerCase()) ||
-          client.email.toLowerCase().includes(query.toLowerCase()) ||
-          client.phone.includes(query),
-      )
-      setFilteredClients(clients)
-
-      // Filter apartments
-      const apartments = apartmentsCrud.filter(
-        (apt) =>
-          apt.number.toLowerCase().includes(query.toLowerCase()) ||
-          apt.type.toLowerCase().includes(query.toLowerCase()),
-      )
-      setFilteredApartments(apartments)
-
-      // Filter payments
-      const payments = paymentsCrud.filter((payment) => {
-        const client = clientsCrud.getById(payment.clientId)
-        return client?.name.toLowerCase().includes(query.toLowerCase()) || false
-      })
-      setFilteredPayments(payments)
+  useEffect(() => {
+    const lcQuery = searchQuery.toLowerCase();
+    if (searchQuery) {
+      setFilteredClients(clients.filter(c => c.name.toLowerCase().includes(lcQuery) || c.email.toLowerCase().includes(lcQuery) || (c.phone && c.phone.includes(searchQuery))));
+      setFilteredApartments(apartments.filter(a => {
+        const buildingName = buildings.find(b => b.id === a.buildingId)?.name || "";
+        return a.number.toLowerCase().includes(lcQuery) || a.type.toLowerCase().includes(lcQuery) || buildingName.toLowerCase().includes(lcQuery);
+      }));
+      setFilteredPayments(payments.filter(p => {
+        const clientName = clients.find(c => c.id === p.clientId)?.name || "";
+        const aptNumber = apartments.find(a => a.id === p.apartmentId)?.number || "";
+        return clientName.toLowerCase().includes(lcQuery) || aptNumber.toLowerCase().includes(lcQuery) || p.status.toLowerCase().includes(lcQuery) || p.method.toLowerCase().includes(lcQuery);
+      }));
     } else {
-      // Reset to all data if query is empty
-      setFilteredClients(clientsCrud.items)
-      setFilteredApartments(apartmentsCrud.items)
-      setFilteredPayments(paymentsCrud.items)
+      setFilteredClients(clients);
+      setFilteredApartments(apartments);
+      setFilteredPayments(payments);
     }
-  }
+  }, [searchQuery, clients, apartments, payments, buildings]);
 
-  // Client CRUD handlers
-  const handleAddClient = (client: Omit<Client, "id" | "createdAt" | "updatedAt">) => {
-    clientsCrud.create({
-      ...client,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-  }
+  // CRUD Handlers
+  const handleAddClient = async (data: Omit<Client, "id"| "createdAt"| "updatedAt">) => { try { await createClient(data); } catch (e) { console.error(e); alert("Error.");}};
+  const handleEditClient = async (data: Omit<Client, "id"| "createdAt"| "updatedAt">) => { if (selectedClientId) try { await updateClient(selectedClientId, data as Partial<Client>); } catch (e) { console.error(e); alert("Error.");}};
+  const handleDeleteClient = async () => { if (selectedClientId) try { await removeClient(selectedClientId); setSelectedClientId(null); } catch (e) { console.error(e); alert("Error.");}};
 
-  const handleEditClient = (client: Omit<Client, "createdAt" | "updatedAt">) => {
-    if (selectedClientId) {
-      clientsCrud.update(selectedClientId, {
-        ...client,
-        updatedAt: new Date(),
-      })
-    }
-  }
-
-  const handleDeleteClient = () => {
-    if (selectedClientId) {
-      clientsCrud.remove(selectedClientId)
-    }
-  }
-
-  // Apartment CRUD handlers
-  const handleAddApartment = (apartment: Omit<Apartment, "id" | "createdAt" | "updatedAt">) => {
-    apartmentsCrud.create({
-      ...apartment,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-  }
-
-  const handleEditApartment = (apartment: Omit<Apartment, "createdAt" | "updatedAt">) => {
+  const handleAddApartment = async (data: Omit<Apartment, "id"| "createdAt"| "updatedAt">) => { try { await createApartment(data); } catch (e) { console.error(e); alert("Error adding apartment.");}};
+  const handleEditApartment = async (data: Omit<Apartment, "id"| "createdAt"| "updatedAt">) => { 
     if (selectedApartmentId) {
-      apartmentsCrud.update(selectedApartmentId, {
-        ...apartment,
-        updatedAt: new Date(),
-      })
+      const { id, createdAt, updatedAt, ...updateData } = data as Apartment; 
+      try { await updateApartment(selectedApartmentId, updateData); } catch (e) { console.error(e); alert("Error editing apartment.");}
     }
-  }
+  };
+  const handleDeleteApartment = async () => { if (selectedApartmentId) try { await deleteApartment(selectedApartmentId); setSelectedApartmentId(null); } catch (e) { console.error(e); alert("Error deleting apartment.");}};
+  
+  const handleAddPayment = async (data: Omit<Payment, "id"| "createdAt"| "updatedAt">) => {
+    try { const newP = await createPaymentDoc(data); if (newP && newP.status === "paid") { await addFinancialTransaction({ accountId: CLIENT_FINANCE_ACCOUNT_ID, type: "income", category: "client_payment", description: `Payment for Apt ${newP.apartmentId}`, amount: newP.amount, currency: newP.currency, transactionDate: newP.paidDate||new Date(), relatedPaymentId: newP.id });}} catch (e) { console.error(e); alert("Error.");}
+  };
+  const handleMarkPaymentPaid = async (p: Payment) => {
+    if (p.status!=="paid") try { await updatePaymentDoc(p.id, {status:"paid", paidDate:new Date()}); await addFinancialTransaction({accountId:CLIENT_FINANCE_ACCOUNT_ID, type:"income", category:"client_payment", description:`Payment ID: ${p.id}`, amount:p.amount, currency:p.currency, transactionDate:new Date(), relatedPaymentId:p.id});} catch(e){console.error(e);alert("Error.")}
+  };
+  const handleDeletePayment = async (id: string) => { if(confirm("Delete payment? This may affect financial records.")) try {await deletePaymentDoc(id);}catch(e){console.error(e);alert("Error.")}};
 
-  const handleDeleteApartment = () => {
-    if (selectedApartmentId) {
-      apartmentsCrud.remove(selectedApartmentId)
-    }
-  }
-
-  // Payment handlers
-  const handleAddPayment = (payment: Omit<Payment, "id" | "createdAt" | "updatedAt">) => {
-    const newPayment = paymentsCrud.create({
-      ...payment,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    })
-
-    // Update finance account if payment is paid
-    if (payment.status === "paid") {
-      accounts.addFinanceTransaction(
-        payment.amount,
-        `Payment received for apartment ${payment.apartmentId}`,
-        "income",
-        "payment",
-        payment.currency,
-      )
-    }
-  }
-
-  // Transaction handlers
-  const handleAddConstructionTransaction = (transaction: {
-    amount: number
-    description: string
-    type: "income" | "expense"
-    category: string
-    currency: Currency
-  }) => {
-    accounts.addConstructionTransaction(
-      transaction.amount,
-      transaction.description,
-      transaction.type,
-      transaction.category,
-      transaction.currency,
-    )
-  }
-
-  const handleAddFinanceTransaction = (transaction: {
-    amount: number
-    description: string
-    type: "income" | "expense"
-    category: string
-    currency: Currency
-  }) => {
-    accounts.addFinanceTransaction(
-      transaction.amount,
-      transaction.description,
-      transaction.type,
-      transaction.category,
-      transaction.currency,
-    )
-  }
+  const handleAddGenericTransaction = async (data: any) => { try {await addFinancialTransaction(data);}catch(e){console.error(e);alert("Error.")}};
+  
+  const constructionMainAccount = accounts.find(acc => acc.type === 'construction' && acc.currency === 'USD'); 
+  const clientFinanceMainAccount = accounts.find(acc => acc.type === 'client_finance' && acc.currency === 'USD');
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-100">
-      {/* Ad Banner */}
-      <AdBannerCarousel />
-
-      <div className="flex flex-1 flex-col md:flex-row">
-        {/* Mobile sidebar toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute left-4 top-4 z-50 md:hidden"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-        >
-          {sidebarOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </Button>
-
-        {/* Sidebar */}
-        <div
-          className={`fixed inset-y-0 left-0 z-40 w-64 transform bg-green-800 p-4 text-white transition-transform duration-200 ease-in-out md:relative md:translate-x-0 ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
+    <AdminRouteGuard>
+      <div className="flex min-h-screen flex-col bg-gray-100">
+        <AdBannerCarousel />
+        <div className="flex flex-1 flex-col md:flex-row">
+        <Button variant="ghost" size="icon" className="absolute left-4 top-4 z-50 md:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}><X className={`${sidebarOpen ? "" : "hidden"} h-6 w-6`} /><Menu className={`${sidebarOpen ? "hidden" : ""} h-6 w-6`} /></Button>
+        <div className={`fixed inset-y-0 left-0 z-40 w-64 transform bg-green-800 p-4 text-white transition-transform duration-200 ease-in-out md:relative md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:block`}>
           <div className="flex h-full flex-col">
-            <div className="mb-8 flex items-center gap-2 px-2">
-              <Image
-                src="/placeholder.svg?height=40&width=40"
-                alt="Logo"
-                width={40}
-                height={40}
-                className="rounded-md bg-white p-1"
-              />
-              <span className="text-xl font-bold">ApartmentPro</span>
-            </div>
-
+            <div className="mb-8 flex items-center gap-2 px-2"><Image src="/placeholder.svg?height=40&width=40" alt="Logo" width={40} height={40} className="rounded-md bg-white p-1"/><span className="text-xl font-bold">ApartmentPro</span></div>
             <nav className="flex-1 space-y-1">
-              <Link
-                href="/admin/dashboard"
-                className="flex items-center rounded-md bg-green-700 px-4 py-3 text-sm font-medium"
-              >
-                <LayoutDashboard className="mr-3 h-5 w-5" />
-                Dashboard
-              </Link>
-              <Link
-                href="/admin/users"
-                className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"
-              >
-                <Users className="mr-3 h-5 w-5" />
-                User Management
-              </Link>
-              <Link
-                href="/admin/clients"
-                className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"
-              >
-                <Users className="mr-3 h-5 w-5" />
-                Client Management
-              </Link>
-              <Link
-                href="/admin/apartments"
-                className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"
-              >
-                <Building className="mr-3 h-5 w-5" />
-                Apartments
-              </Link>
-              <Link
-                href="/admin/payments"
-                className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"
-              >
-                <CreditCard className="mr-3 h-5 w-5" />
-                Payments
-              </Link>
-              <Link
-                href="/admin/crm"
-                className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"
-              >
-                <MessageSquare className="mr-3 h-5 w-5" />
-                CRM
-              </Link>
-              <Link
-                href="/admin/analytics"
-                className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"
-              >
-                <BarChart3 className="mr-3 h-5 w-5" />
-                Analytics
-              </Link>
-              <Link
-                href="/admin/settings"
-                className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"
-              >
-                <Settings className="mr-3 h-5 w-5" />
-                Settings
-              </Link>
+              <Link href="/admin/dashboard" className="flex items-center rounded-md bg-green-700 px-4 py-3 text-sm font-medium"><LayoutDashboard className="mr-3 h-5 w-5" />Dashboard</Link>
+              <Link href="/admin/crm" className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"><Briefcase className="mr-3 h-5 w-5" />CRM</Link>
+              <Link href="/admin/clients" className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"><Users className="mr-3 h-5 w-5" />Clients</Link>
+              <Link href="/admin/apartments" className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"><Building className="mr-3 h-5 w-5" />Apartments</Link>
+              <Link href="/admin/payments" className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"><CreditCard className="mr-3 h-5 w-5" />Payments</Link>
+              <Link href="/admin/analytics" className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"><BarChart3 className="mr-3 h-5 w-5" />Analytics</Link>
+              <Link href="/admin/settings" className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"><Settings className="mr-3 h-5 w-5" />Settings</Link>
             </nav>
-
-            <div className="mt-auto border-t border-green-700 pt-4">
-              <Link
-                href="/"
-                className="flex items-center rounded-md px-4 py-3 text-sm font-medium text-green-100 hover:bg-green-700"
-              >
-                <LogOut className="mr-3 h-5 w-5" />
-                Logout
-              </Link>
-            </div>
+            <div className="mt-auto border-t border-green-700 pt-4"><Button variant="ghost" className="flex w-full items-center justify-start" onClick={async () => { await logout(); }}><LogOut className="mr-3 h-5 w-5" />Logout</Button></div>
           </div>
         </div>
 
-        {/* Main content */}
         <div className="flex-1 p-4 md:p-6">
           <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-gray-500">Welcome back, Admin</p>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <SearchBar placeholder="Search clients, apartments..." onSearch={handleSearch} />
-              <CurrencySelector defaultCurrency={currency} onCurrencyChange={handleCurrencyChange} />
-            </div>
+            <div><h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1><p className="text-gray-500">Welcome back, {currentUser?.email || "Admin"}</p></div>
+            <div className="flex flex-col gap-2 sm:flex-row"><SearchBar placeholder="Search across system..." onSearch={handleSearch} /></div>
           </header>
 
           <Tabs defaultValue="overview">
-            <TabsList className="mb-4">
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="apartments">Apartments</TabsTrigger>
-              <TabsTrigger value="clients">Clients</TabsTrigger>
-              <TabsTrigger value="payments">Payments</TabsTrigger>
-            </TabsList>
-
+            <TabsList className="mb-4 flex-wrap"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="apartments">Apartments</TabsTrigger><TabsTrigger value="clients">Clients</TabsTrigger><TabsTrigger value="payments">Payments</TabsTrigger><TabsTrigger value="finance">Finance</TabsTrigger></TabsList>
+            
             <TabsContent value="overview" className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Total Buildings</CardDescription>
-                    <CardTitle className="text-4xl">{getAllBuildings().length}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-xs text-green-600">+2 from last month</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Available Apartments</CardDescription>
-                    <CardTitle className="text-4xl">
-                      {apartmentsCrud.filter((apt) => apt.status === "available").length}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-xs text-green-600">
-                      {Math.round(
-                        (apartmentsCrud.filter((apt) => apt.status !== "available").length /
-                          apartmentsCrud.items.length) *
-                          100,
-                      )}
-                      % occupancy rate
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Total Clients</CardDescription>
-                    <CardTitle className="text-4xl">{clientsCrud.items.length}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-xs text-green-600">+7 new this month</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardDescription>Monthly Revenue</CardDescription>
-                    <CardTitle className="text-4xl">
-                      {formatCurrency(accounts.financeAccount.total / 12, currency)}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-xs text-green-600">+12% from last month</div>
-                  </CardContent>
-                </Card>
+                <Card><CardHeader className="pb-2"><CardDescription>Total Buildings</CardDescription><CardTitle className="text-4xl">{buildingsLoading ? <Loader2 className="h-8 w-8 animate-spin"/> : buildings.length}</CardTitle></CardHeader><CardContent><div className="text-xs text-gray-500">From Firestore</div></CardContent></Card>
+                <Card><CardHeader className="pb-2"><CardDescription>Available Apartments</CardDescription><CardTitle className="text-4xl">{apartmentsLoading ? <Loader2 className="h-8 w-8 animate-spin"/> : apartments.filter(apt => apt.status === "available").length}</CardTitle></CardHeader><CardContent><div className="text-xs text-gray-500">From Firestore</div></CardContent></Card>
+                <Card><CardHeader className="pb-2"><CardDescription>Total Clients</CardDescription><CardTitle className="text-4xl">{clientsLoading ? <Loader2 className="h-8 w-8 animate-spin" /> : clients.length}</CardTitle></CardHeader><CardContent><div className="text-xs text-gray-500">From Firestore</div></CardContent></Card>
+                <Card><CardHeader className="pb-2"><CardDescription>Client Finance (USD)</CardDescription>{loadingAccounts ? <Loader2 className="h-8 w-8 animate-spin"/> : clientFinanceMainAccount ? <CardTitle className="text-4xl">{formatCurrency(clientFinanceMainAccount.balance, clientFinanceMainAccount.currency)}</CardTitle> : <CardTitle className="text-sm">N/A</CardTitle>}</CardHeader><CardContent><div className="text-xs text-gray-500">From Firestore</div></CardContent></Card>
               </div>
-
               <div className="grid gap-4 md:grid-cols-2">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Recent Activities</CardTitle>
-                  </CardHeader>
+                  <CardHeader><CardTitle>Recent Financial Activities</CardTitle><CardDescription>For {accounts.find(a=>a.id === selectedFinanceAccountId)?.name || "Selected Account"}</CardDescription></CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      {accounts.getRecentTransactions(3).map((transaction, index) => (
-                        <div key={index} className="flex items-start gap-4">
-                          <div className="rounded-full bg-green-100 p-2 text-green-700">
-                            {transaction.type === "income" ? (
-                              <CreditCard className="h-4 w-4" />
-                            ) : (
-                              <Building className="h-4 w-4" />
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-medium">
-                              {transaction.type === "income" ? "Payment Received" : "Expense"}
-                            </p>
-                            <p className="text-sm text-gray-500">{transaction.description}</p>
-                            <p className="text-xs text-gray-400">{transaction.date.toLocaleString()}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    {loadingTransactions && <div className="flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading...</div>}
+                    {errorTransactions && <p className="text-red-500">Error: {errorTransactions}</p>}
+                    {!loadingTransactions && transactionsForSelectedAccount.length === 0 && <p>No transactions.</p>}
+                    <div className="space-y-3">{transactionsForSelectedAccount.slice(0,5).map((tx) => (<div key={tx.id} className="flex items-center gap-3"><div className={`p-2 rounded-full ${tx.type === "income" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{tx.type === "income" ? <TrendingUp size={18}/> : <TrendingDown size={18}/>}</div><div><p className="font-medium text-sm">{tx.description}</p><p className="text-xs text-gray-500">{tx.category} | {formatCurrency(tx.amount, tx.currency)} | {new Date(tx.transactionDate).toLocaleDateString()}</p></div></div>))}</div>
                   </CardContent>
                 </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Payment Status</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="text-sm font-medium">Paid</span>
-                          <span className="text-sm font-medium">65%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-gray-200">
-                          <div className="h-2 rounded-full bg-green-600" style={{ width: "65%" }}></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="text-sm font-medium">Pending</span>
-                          <span className="text-sm font-medium">25%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-gray-200">
-                          <div className="h-2 rounded-full bg-yellow-500" style={{ width: "25%" }}></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="text-sm font-medium">Overdue</span>
-                          <span className="text-sm font-medium">10%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-gray-200">
-                          <div className="h-2 rounded-full bg-red-500" style={{ width: "10%" }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <Card><CardHeader><CardTitle>Payment Status Summary</CardTitle></CardHeader><CardContent>{paymentsLoading ? <Loader2 className="h-6 w-6 animate-spin"/> : <p className="text-sm text-gray-500">{`Total Payments: ${payments.length} (Paid: ${payments.filter(p=>p.status==='paid').length}, Pending: ${payments.filter(p=>p.status==='pending').length}, Overdue: ${payments.filter(p=>p.status==='overdue').length})`}</p>}</CardContent></Card>
               </div>
             </TabsContent>
 
             <TabsContent value="apartments" className="space-y-4">
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Apartment Status</CardTitle>
-                    <CardDescription>Overview of all apartments and their current status</CardDescription>
-                  </div>
-                  <Button className="bg-green-700 hover:bg-green-800" onClick={() => setAddApartmentDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add New Apartment
-                  </Button>
-                </CardHeader>
+                <CardHeader className="flex-row items-center justify-between"><CardTitle>Apartments</CardTitle><Button onClick={() => setAddApartmentDialogOpen(true)}><PlusCircle className="mr-2 h-4 w-4"/>Add Apartment</Button></CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="border-b text-left">
-                          <th className="px-4 py-2 font-medium">Building</th>
-                          <th className="px-4 py-2 font-medium">Unit #</th>
-                          <th className="px-4 py-2 font-medium">Type</th>
-                          <th className="px-4 py-2 font-medium">Size (sq ft)</th>
-                          <th className="px-4 py-2 font-medium">Price</th>
-                          <th className="px-4 py-2 font-medium">Status</th>
-                          <th className="px-4 py-2 font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredApartments.map((apartment) => {
-                          const building = getAllBuildings().find((b) => b.id === apartment.buildingId)
-                          return (
-                            <tr key={apartment.id} className="border-b">
-                              <td className="px-4 py-2">{building?.name || apartment.buildingId}</td>
-                              <td className="px-4 py-2">{apartment.number}</td>
-                              <td className="px-4 py-2">{apartment.type}</td>
-                              <td className="px-4 py-2">{apartment.size}</td>
-                              <td className="px-4 py-2">{formatCurrency(apartment.price, currency)}</td>
-                              <td className="px-4 py-2">
-                                <span
-                                  className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                    apartment.status === "available"
-                                      ? "bg-green-100 text-green-700"
-                                      : apartment.status === "reserved"
-                                        ? "bg-yellow-100 text-yellow-700"
-                                        : "bg-red-100 text-red-700"
-                                  }`}
-                                >
-                                  {apartment.status.charAt(0).toUpperCase() + apartment.status.slice(1)}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2">
-                                <div className="flex space-x-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedApartmentId(apartment.id)
-                                      setViewApartmentDialogOpen(true)
-                                    }}
-                                  >
-                                    <Eye className="mr-1 h-3 w-3" />
-                                    View
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedApartmentId(apartment.id)
-                                      setEditApartmentDialogOpen(true)
-                                    }}
-                                  >
-                                    <Edit className="mr-1 h-3 w-3" />
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-red-600 hover:bg-red-50"
-                                    onClick={() => {
-                                      setSelectedApartmentId(apartment.id)
-                                      setDeleteApartmentDialogOpen(true)
-                                    }}
-                                  >
-                                    <Trash2 className="mr-1 h-3 w-3" />
-                                    Delete
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  {apartmentsLoading && <div className="flex items-center justify-center py-4"><Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading apartments...</div>}
+                  {apartmentsError && <div className="text-red-500 py-4">Error: {apartmentsError}</div>}
+                  {!apartmentsLoading && !apartmentsError && (<div className="overflow-x-auto"><table className="w-full"><thead><tr><th className="p-2 text-left">Building</th><th className="p-2 text-left">Unit #</th><th className="p-2 text-left">Type</th><th className="p-2 text-left">Price</th><th className="p-2 text-left">Status</th><th className="p-2 text-right">Actions</th></tr></thead><tbody>
+                    {filteredApartments.map(apt => { const buildingName = buildingsLoading ? "..." : (buildings.find((b: BuildingType) => b.id === apt.buildingId)?.name || "N/A"); return (<tr key={apt.id} className="border-b"><td className="p-2">{buildingName}</td><td className="p-2">{apt.number}</td><td className="p-2">{apt.type}</td><td className="p-2">{formatCurrency(apt.price, DEFAULT_CURRENCY)}</td><td className="p-2">{apt.status}</td><td className="p-2 text-right"><Button variant="ghost" size="icon" onClick={()=>{setSelectedApartmentId(apt.id); setApartmentToView(apt); setViewApartmentDialogOpen(true);}}><Eye size={18}/></Button><Button variant="ghost" size="icon" onClick={()=>{setSelectedApartmentId(apt.id); setEditApartmentDialogOpen(true);}}><Edit2 size={18}/></Button><Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700" onClick={()=>{setSelectedApartmentId(apt.id); setDeleteApartmentDialogOpen(true);}}><Trash2 size={18}/></Button></td></tr>);})}
+                  </tbody></table></div>)}
                 </CardContent>
               </Card>
             </TabsContent>
 
             <TabsContent value="clients" className="space-y-4">
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Client Management</CardTitle>
-                    <CardDescription>Manage all your clients and their information</CardDescription>
-                  </div>
-                  <Button className="bg-green-700 hover:bg-green-800" onClick={() => setAddClientDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add New Client
-                  </Button>
-                </CardHeader>
+                <CardHeader className="flex-row items-center justify-between"><CardTitle>Clients</CardTitle><Button onClick={() => setAddClientDialogOpen(true)}><PlusCircle className="mr-2 h-4 w-4"/>Add Client</Button></CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="border-b text-left">
-                          <th className="px-4 py-2 font-medium">Name</th>
-                          <th className="px-4 py-2 font-medium">Email</th>
-                          <th className="px-4 py-2 font-medium">Phone</th>
-                          <th className="px-4 py-2 font-medium">Type</th>
-                          <th className="px-4 py-2 font-medium">Status</th>
-                          <th className="px-4 py-2 font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredClients.map((client) => (
-                          <tr key={client.id} className="border-b">
-                            <td className="px-4 py-2">{client.name}</td>
-                            <td className="px-4 py-2">{client.email}</td>
-                            <td className="px-4 py-2">{client.phone}</td>
-                            <td className="px-4 py-2">
-                              <span className="capitalize">{client.type}</span>
-                            </td>
-                            <td className="px-4 py-2">
-                              <span
-                                className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                  client.status === "active"
-                                    ? "bg-green-100 text-green-700"
-                                    : client.status === "pending"
-                                      ? "bg-yellow-100 text-yellow-700"
-                                      : "bg-gray-100 text-gray-700"
-                                }`}
-                              >
-                                {client.status.charAt(0).toUpperCase() + client.status.slice(1)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2">
-                              <div className="flex space-x-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedClientId(client.id)
-                                    setViewClientDialogOpen(true)
-                                  }}
-                                >
-                                  <Eye className="mr-1 h-3 w-3" />
-                                  View
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedClientId(client.id)
-                                    setEditClientDialogOpen(true)
-                                  }}
-                                >
-                                  <Edit className="mr-1 h-3 w-3" />
-                                  Edit
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="bg-green-50 text-green-700"
-                                  onClick={() => {
-                                    window.open(`tel:${client.phone}`, "_self")
-                                  }}
-                                >
-                                  <Phone className="mr-1 h-3 w-3" />
-                                  Contact
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  {clientsLoading && <div className="flex items-center justify-center py-4"><Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading clients...</div>}
+                  {clientsError && <div className="text-red-500 py-4">Error: {clientsError}</div>}
+                  {!clientsLoading && !clientsError && (<div className="overflow-x-auto"><table className="w-full"><thead><tr><th className="p-2 text-left">Name</th><th className="p-2 text-left">Email</th><th className="p-2 text-left">Phone</th><th className="p-2 text-left">Type</th><th className="p-2 text-left">Status</th><th className="p-2 text-right">Actions</th></tr></thead><tbody>
+                    {filteredClients.map(client => (<tr key={client.id} className="border-b"><td className="p-2">{client.name}</td><td className="p-2">{client.email}</td><td className="p-2">{client.phone}</td><td className="p-2">{client.type}</td><td className="p-2">{client.status}</td><td className="p-2 text-right"><Button variant="ghost" size="icon" onClick={()=>{setSelectedClientId(client.id); setClientToView(client); setViewClientDialogOpen(true);}}><Eye size={18}/></Button><Button variant="ghost" size="icon" onClick={()=>{setSelectedClientId(client.id); setEditClientDialogOpen(true);}}><Edit2 size={18}/></Button><Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700" onClick={()=>{setSelectedClientId(client.id); setDeleteClientDialogOpen(true);}}><Trash2 size={18}/></Button></td></tr>))}
+                  </tbody></table></div>)}
                 </CardContent>
               </Card>
             </TabsContent>
 
             <TabsContent value="payments" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle>Construction Account</CardTitle>
-                      <CardDescription>Financial overview of construction expenses</CardDescription>
-                    </div>
-                    <Button
-                      className="bg-green-700 hover:bg-green-800"
-                      onClick={() => setAddConstructionTransactionDialogOpen(true)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Transaction
-                    </Button>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span>Total Budget</span>
-                        <span className="font-semibold">
-                          {formatCurrency(accounts.constructionAccount.total, currency)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Spent</span>
-                        <span className="font-semibold">
-                          {formatCurrency(accounts.constructionAccount.used, currency)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Remaining</span>
-                        <span className="font-semibold text-green-700">
-                          {formatCurrency(accounts.constructionAccount.remaining, currency)}
-                        </span>
-                      </div>
-                      <div>
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="text-sm font-medium">Budget Usage</span>
-                          <span className="text-sm font-medium">
-                            {Math.round((accounts.constructionAccount.used / accounts.constructionAccount.total) * 100)}
-                            %
-                          </span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-gray-200">
-                          <div
-                            className="h-2 rounded-full bg-green-600"
-                            style={{
-                              width: `${Math.round((accounts.constructionAccount.used / accounts.constructionAccount.total) * 100)}%`,
-                            }}
-                          ></div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                      <CardTitle>Client Finance Account</CardTitle>
-                      <CardDescription>Overview of client payments and revenue</CardDescription>
-                    </div>
-                    <Button
-                      className="bg-green-700 hover:bg-green-800"
-                      onClick={() => setAddFinanceTransactionDialogOpen(true)}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Transaction
-                    </Button>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span>Total Revenue</span>
-                        <span className="font-semibold">{formatCurrency(accounts.financeAccount.total, currency)}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Pending Payments</span>
-                        <span className="font-semibold">
-                          {formatCurrency(
-                            paymentsCrud.filter((p) => p.status === "pending").reduce((sum, p) => sum + p.amount, 0),
-                            currency,
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Overdue Payments</span>
-                        <span className="font-semibold text-red-700">
-                          {formatCurrency(
-                            paymentsCrud.filter((p) => p.status === "overdue").reduce((sum, p) => sum + p.amount, 0),
-                            currency,
-                          )}
-                        </span>
-                      </div>
-                      <div>
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="text-sm font-medium">Collection Rate</span>
-                          <span className="text-sm font-medium">82%</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-gray-200">
-                          <div className="h-2 rounded-full bg-green-600" style={{ width: "82%" }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
               <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Installment Plans</CardTitle>
-                    <CardDescription>Track client installment plans and payment schedules</CardDescription>
-                  </div>
-                  <Button className="bg-green-700 hover:bg-green-800" onClick={() => setAddPaymentDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Payment
-                  </Button>
+                <CardHeader className="flex-row items-center justify-between"><CardTitle>Payments</CardTitle><Button onClick={() => setAddPaymentDialogOpen(true)}><PlusCircle className="mr-2 h-4 w-4"/>Add Payment</Button></CardHeader>
+                <CardContent>
+                  {paymentsLoading && <div className="flex items-center justify-center py-4"><Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading payments...</div>}
+                  {paymentsError && <div className="text-red-500 py-4">Error: {paymentsError}</div>}
+                  {!paymentsLoading && !paymentsError && (<div className="overflow-x-auto"><table className="w-full"><thead><tr><th className="p-2 text-left">Client</th><th className="p-2 text-left">Apartment</th><th className="p-2 text-left">Amount</th><th className="p-2 text-left">Status</th><th className="p-2 text-left">Due Date</th><th className="p-2 text-right">Actions</th></tr></thead><tbody>
+                    {filteredPayments.map(payment => { const client = clients.find(c=>c.id === payment.clientId); const apt = apartments.find(a=>a.id === payment.apartmentId); return (<tr key={payment.id} className="border-b"><td className="p-2">{client?.name || "N/A"}</td><td className="p-2">{apt?.number || "N/A"}</td><td className="p-2">{formatCurrency(payment.amount, payment.currency)}</td><td className="p-2">{payment.status}</td><td className="p-2">{new Date(payment.dueDate).toLocaleDateString()}</td><td className="p-2 text-right">{payment.status !== 'paid' && (<Button size="sm" variant="outline" onClick={()=>handleMarkPaymentPaid(payment)}>Mark Paid</Button>)}<Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700" onClick={()=>handleDeletePayment(payment.id)}><Trash2 size={18}/></Button></td></tr>);})}
+                  </tbody></table></div>)}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="finance" className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <Card><CardHeader className="flex-row items-center justify-between"><CardTitle>Construction Account</CardTitle><Button size="sm" onClick={() => { if(constructionMainAccount) {setTransactionDialogAccountId(constructionMainAccount.id); setTransactionDialogAccountType("construction"); setShowTransactionDialog(true); } else {alert("Construction account not found/loaded.")} }}><PlusCircle className="mr-2 h-4 w-4"/>Add Tx</Button></CardHeader><CardContent>{loadingAccounts ? <Loader2 className="h-6 w-6 animate-spin"/> : constructionMainAccount ? <p className="text-2xl font-bold">{formatCurrency(constructionMainAccount.balance, constructionMainAccount.currency)}</p> : <p>N/A</p>}</CardContent></Card>
+                <Card><CardHeader className="flex-row items-center justify-between"><CardTitle>Client Finance Account</CardTitle><Button size="sm" onClick={() => { if(clientFinanceMainAccount) {setTransactionDialogAccountId(clientFinanceMainAccount.id); setTransactionDialogAccountType("finance"); setShowTransactionDialog(true); } else {alert("Client Finance account not found/loaded.")} }}><PlusCircle className="mr-2 h-4 w-4"/>Add Tx</Button></CardHeader><CardContent>{loadingAccounts ? <Loader2 className="h-6 w-6 animate-spin"/> : clientFinanceMainAccount ? <p className="text-2xl font-bold">{formatCurrency(clientFinanceMainAccount.balance, clientFinanceMainAccount.currency)}</p> : <p>N/A</p>}</CardContent></Card>
+              </div>
+              <Card>
+                <CardHeader className="flex-row items-center justify-between"><CardTitle>Transaction History</CardTitle>
+                  <Select onValueChange={(value) => setSelectedFinanceAccountId(value)} defaultValue={selectedFinanceAccountId || undefined}>
+                    <SelectTrigger className="w-auto"><SelectValue placeholder="Select Account" /></SelectTrigger>
+                    <SelectContent>{accounts.map(acc => (<SelectItem key={acc.id} value={acc.id}>{acc.name} ({acc.currency})</SelectItem>))}</SelectContent>
+                  </Select>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="border-b text-left">
-                          <th className="px-4 py-2 font-medium">Client</th>
-                          <th className="px-4 py-2 font-medium">Apartment</th>
-                          <th className="px-4 py-2 font-medium">Amount</th>
-                          <th className="px-4 py-2 font-medium">Status</th>
-                          <th className="px-4 py-2 font-medium">Due Date</th>
-                          <th className="px-4 py-2 font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredPayments.map((payment) => {
-                          const client = clientsCrud.getById(payment.clientId)
-                          const apartment = apartmentsCrud.getById(payment.apartmentId)
-
-                          return (
-                            <tr key={payment.id} className="border-b">
-                              <td className="px-4 py-2">{client?.name || "Unknown"}</td>
-                              <td className="px-4 py-2">{apartment?.number || "Unknown"}</td>
-                              <td className="px-4 py-2">{formatCurrency(payment.amount, currency)}</td>
-                              <td className="px-4 py-2">
-                                <span
-                                  className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                    payment.status === "paid"
-                                      ? "bg-green-100 text-green-700"
-                                      : payment.status === "pending"
-                                        ? "bg-yellow-100 text-yellow-700"
-                                        : "bg-red-100 text-red-700"
-                                  }`}
-                                >
-                                  {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2">{payment.dueDate.toLocaleDateString()}</td>
-                              <td className="px-4 py-2">
-                                <div className="flex space-x-2">
-                                  <Button variant="outline" size="sm">
-                                    <Eye className="mr-1 h-3 w-3" />
-                                    View
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className={
-                                      payment.status === "overdue"
-                                        ? "bg-red-50 text-red-700 hover:bg-red-100"
-                                        : "bg-green-50 text-green-700 hover:bg-green-100"
-                                    }
-                                    onClick={() => {
-                                      if (payment.status === "pending" || payment.status === "overdue") {
-                                        // Mark as paid
-                                        paymentsCrud.update(payment.id, {
-                                          status: "paid",
-                                          paidDate: new Date(),
-                                          updatedAt: new Date(),
-                                        })
-
-                                        // Add to finance account
-                                        accounts.addFinanceTransaction(
-                                          payment.amount,
-                                          `Payment received for apartment ${payment.apartmentId}`,
-                                          "income",
-                                          "payment",
-                                          payment.currency,
-                                        )
-                                      }
-                                    }}
-                                  >
-                                    {payment.status === "overdue" ? "Mark Paid" : "Send Invoice"}
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  {loadingTransactions && <div className="flex items-center justify-center py-4"><Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading transactions...</div>}
+                  {errorTransactions && <div className="text-red-500 py-4">Error: {errorTransactions}</div>}
+                  {!loadingTransactions && !errorTransactions && transactionsForSelectedAccount.length === 0 && <p>No transactions for this account.</p>}
+                  {!loadingTransactions && !errorTransactions && (<div className="overflow-x-auto"><table className="w-full"><thead><tr><th className="p-2 text-left">Date</th><th className="p-2 text-left">Description</th><th className="p-2 text-left">Category</th><th className="p-2 text-left">Type</th><th className="p-2 text-right">Amount</th></tr></thead><tbody>
+                    {transactionsForSelectedAccount.map(tx => (<tr key={tx.id} className="border-b"><td className="p-2">{new Date(tx.transactionDate).toLocaleDateString()}</td><td className="p-2">{tx.description}</td><td className="p-2">{tx.category}</td><td className={`p-2 capitalize ${tx.type==='income'?'text-green-600':'text-red-600'}`}>{tx.type}</td><td className={`p-2 text-right font-medium ${tx.type==='income'?'text-green-600':'text-red-600'}`}>{formatCurrency(tx.amount, tx.currency)}</td></tr>))}
+                  </tbody></table></div>)}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -889,115 +284,27 @@ export default function AdminDashboard() {
       </div>
 
       {/* Dialogs */}
-      <ClientDialog
-        open={addClientDialogOpen}
-        onOpenChange={setAddClientDialogOpen}
-        onSave={handleAddClient}
-        title="Add New Client"
-        description="Add a new client to the system."
-      />
-
-      <ClientDialog
-        open={editClientDialogOpen}
-        onOpenChange={setEditClientDialogOpen}
-        onSave={handleEditClient}
-        client={selectedClientId ? clientsCrud.getById(selectedClientId) : undefined}
-        title="Edit Client"
-        description="Update client information."
-      />
-
-      <ViewClientDialog
-        open={viewClientDialogOpen}
-        onOpenChange={setViewClientDialogOpen}
-        clientId={selectedClientId || ""}
-        onEdit={() => {
-          setViewClientDialogOpen(false)
-          setEditClientDialogOpen(true)
-        }}
-        onDelete={() => {
-          setViewClientDialogOpen(false)
-          setDeleteClientDialogOpen(true)
-        }}
-        currency={currency}
-      />
-
-      <ConfirmDialog
-        open={deleteClientDialogOpen}
-        onOpenChange={setDeleteClientDialogOpen}
-        onConfirm={handleDeleteClient}
-        title="Delete Client"
-        description="Are you sure you want to delete this client? This action cannot be undone."
-        confirmText="Delete"
-        variant="destructive"
-      />
-
-      <ApartmentDialog
-        open={addApartmentDialogOpen}
-        onOpenChange={setAddApartmentDialogOpen}
-        onSave={handleAddApartment}
-        title="Add New Apartment"
-        description="Add a new apartment to the system."
-      />
-
-      <ApartmentDialog
-        open={editApartmentDialogOpen}
-        onOpenChange={setEditApartmentDialogOpen}
-        onSave={handleEditApartment}
-        apartment={selectedApartmentId ? apartmentsCrud.getById(selectedApartmentId) : undefined}
-        title="Edit Apartment"
-        description="Update apartment information."
-      />
-
-      <ViewApartmentDialog
-        open={viewApartmentDialogOpen}
-        onOpenChange={setViewApartmentDialogOpen}
-        apartmentId={selectedApartmentId || ""}
-        onEdit={() => {
-          setViewApartmentDialogOpen(false)
-          setEditApartmentDialogOpen(true)
-        }}
-        onDelete={() => {
-          setViewApartmentDialogOpen(false)
-          setDeleteApartmentDialogOpen(true)
-        }}
-        currency={currency}
-      />
-
-      <ConfirmDialog
-        open={deleteApartmentDialogOpen}
-        onOpenChange={setDeleteApartmentDialogOpen}
-        onConfirm={handleDeleteApartment}
-        title="Delete Apartment"
-        description="Are you sure you want to delete this apartment? This action cannot be undone."
-        confirmText="Delete"
-        variant="destructive"
-      />
-
-      <PaymentDialog
-        open={addPaymentDialogOpen}
-        onOpenChange={setAddPaymentDialogOpen}
-        onSave={handleAddPayment}
-        title="Add New Payment"
-        description="Record a new payment in the system."
-      />
-
+      <ClientDialog open={addClientDialogOpen} onOpenChange={setAddClientDialogOpen} onSave={handleAddClient} title="Add New Client"/>
+      <ClientDialog open={editClientDialogOpen} onOpenChange={setEditClientDialogOpen} onSave={handleEditClient} client={selectedClientId ? clients.find(c => c.id === selectedClientId) : undefined} title="Edit Client"/>
+      <ViewClientDialog open={viewClientDialogOpen} onOpenChange={setViewClientDialogOpen} client={clientToView} onEdit={() => { setViewClientDialogOpen(false); setSelectedClientId(clientToView?.id || null); setEditClientDialogOpen(true);}} onDelete={() => { setViewClientDialogOpen(false); setSelectedClientId(clientToView?.id || null); setDeleteClientDialogOpen(true);}} currency={DEFAULT_CURRENCY}/>
+      <ConfirmDialog open={deleteClientDialogOpen} onOpenChange={setDeleteClientDialogOpen} onConfirm={handleDeleteClient} title="Delete Client" description="Are you sure?" confirmText="Delete" variant="destructive"/>
+      
+      <ApartmentDialog open={addApartmentDialogOpen} onOpenChange={setAddApartmentDialogOpen} onSave={handleAddApartment} title="Add New Apartment" buildings={buildings} />
+      <ApartmentDialog open={editApartmentDialogOpen} onOpenChange={setEditApartmentDialogOpen} onSave={handleEditApartment} apartment={selectedApartmentId ? apartments.find(a => a.id === selectedApartmentId) : undefined} title="Edit Apartment" buildings={buildings} />
+      <ViewApartmentDialog open={viewApartmentDialogOpen} onOpenChange={setViewApartmentDialogOpen} apartment={apartmentToView} onEdit={() => { setViewApartmentDialogOpen(false); setSelectedApartmentId(apartmentToView?.id || null); setEditApartmentDialogOpen(true);}} onDelete={() => { setViewApartmentDialogOpen(false); setSelectedApartmentId(apartmentToView?.id || null); setDeleteApartmentDialogOpen(true);}} currency={DEFAULT_CURRENCY}/>
+      <ConfirmDialog open={deleteApartmentDialogOpen} onOpenChange={setDeleteApartmentDialogOpen} onConfirm={handleDeleteApartment} title="Delete Apartment" description="Are you sure?" confirmText="Delete" variant="destructive"/>
+      
+      <PaymentDialog open={addPaymentDialogOpen} onOpenChange={setAddPaymentDialogOpen} onSave={handleAddPayment} title="Add New Payment" clients={clients} apartments={apartments} />
+      
       <TransactionDialog
-        open={addConstructionTransactionDialogOpen}
-        onOpenChange={setAddConstructionTransactionDialogOpen}
-        onSave={handleAddConstructionTransaction}
-        title="Add Construction Transaction"
-        description="Record a new transaction for the construction account."
-        accountType="construction"
+        open={showTransactionDialog}
+        onOpenChange={setShowTransactionDialog}
+        onSave={(data) => { if (transactionDialogAccountId) { handleAddGenericTransaction({ accountId: transactionDialogAccountId, ...data }); } }}
+        title={`Add Transaction to ${transactionDialogAccountType === 'construction' ? 'Construction' : 'Finance'} Account`}
+        description="Record a new transaction."
+        accountType={transactionDialogAccountType || undefined}
       />
-
-      <TransactionDialog
-        open={addFinanceTransactionDialogOpen}
-        onOpenChange={setAddFinanceTransactionDialogOpen}
-        onSave={handleAddFinanceTransaction}
-        title="Add Finance Transaction"
-        description="Record a new transaction for the finance account."
-        accountType="finance"
-      />
-    </div>
-  )
+      </div>
+    </AdminRouteGuard>
+  );
 }

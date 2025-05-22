@@ -9,37 +9,56 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getApartmentById, getBuildingById, getClientByApartment, formatCurrency } from "@/lib/data"
-import type { Currency } from "@/lib/types"
-import Image from "next/image"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Removed getApartmentById, getBuildingById, getClientByApartment
+import { formatCurrency } from "@/lib/data"; // Keep formatCurrency or move to a utils file
+import type { Currency, Apartment, Client as ClientType, Building as BuildingType } from "@/lib/types"; // Added Apartment, Client, Building types
+import Image from "next/image";
+import { useBuildings } from "@/lib/hooks/use-buildings"; // Added
+import { useCrud as useClientCrud } from "@/lib/hooks/use-crud"; // Added
+import { Loader2 } from "lucide-react"; // For loading state
 
 interface ViewApartmentDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  apartmentId: string
-  onEdit: () => void
-  onDelete: () => void
-  currency: Currency
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  apartment: Apartment | null | undefined; // Changed from apartmentId to apartment object
+  onEdit: () => void;
+  onDelete: () => void;
+  currency: Currency;
 }
 
 export function ViewApartmentDialog({
   open,
   onOpenChange,
-  apartmentId,
+  apartment, // Use apartment object directly
   onEdit,
   onDelete,
   currency,
 }: ViewApartmentDialogProps) {
-  const apartment = getApartmentById(apartmentId)
+  const { buildings, loading: buildingsLoading } = useBuildings();
+  const { items: clients, loading: clientsLoading } = useClientCrud();
 
   if (!apartment) {
-    return null
+    return null; // Or a placeholder if open is true but apartment is null
   }
 
-  const building = getBuildingById(apartment.buildingId)
-  const client = getClientByApartment(apartment.id)
+  const building = !buildingsLoading && apartment ? buildings.find(b => b.id === apartment.buildingId) : null;
+  // Assuming Client type has apartmentId for this relation.
+  // If Apartment stores clientId, then it would be: clients.find(c => c.id === apartment.clientId)
+  const client = !clientsLoading && apartment ? clients.find((c: ClientType) => c.apartmentId === apartment.id) : null;
 
+
+  if (buildingsLoading || clientsLoading) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[700px] flex items-center justify-center">
+          <Loader2 className="h-10 w-10 animate-spin text-green-700" />
+          <p className="ml-2">Loading details...</p>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[700px]">
@@ -99,7 +118,7 @@ export function ViewApartmentDialog({
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-500">Added On</p>
-                <p className="text-lg">{apartment.createdAt.toLocaleDateString()}</p>
+                <p className="text-lg">{apartment.createdAt ? new Date(apartment.createdAt).toLocaleDateString() : "N/A"}</p>
               </div>
             </div>
           </TabsContent>
@@ -168,16 +187,18 @@ export function ViewApartmentDialog({
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Client Since</p>
-                  <p className="text-lg">{client.createdAt.toLocaleDateString()}</p>
+                  <p className="text-lg">{client.createdAt ? new Date(client.createdAt).toLocaleDateString() : "N/A"}</p>
                 </div>
               </div>
             ) : (
-              <div className="rounded-md bg-yellow-50 p-4 text-yellow-700">No client assigned to this apartment.</div>
+              <div className="rounded-md bg-yellow-50 p-4 text-yellow-700">
+                {clientsLoading ? "Loading client information..." : "No client assigned to this apartment."}
+              </div>
             )}
           </TabsContent>
         </Tabs>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="gap-2 pt-4 border-t mt-2"> {/* Added padding and border */}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>

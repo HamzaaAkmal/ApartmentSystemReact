@@ -15,23 +15,24 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { CurrencySelector } from "@/components/currency-selector"
-import type { Currency } from "@/lib/types"
+import { Textarea } from "@/components/ui/textarea";
+import { CurrencySelector } from "@/components/currency-selector";
+import type { Currency, TransactionType } from "@/lib/types"; // Import TransactionType
 
 interface TransactionDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  onSave: (transaction: {
-    amount: number
-    description: string
-    type: "income" | "expense"
-    category: string
-    currency: Currency
-  }) => void
-  title?: string
-  description?: string
-  accountType: "construction" | "finance"
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (transactionData: { // Renamed and type updated
+    amount: number;
+    description: string;
+    type: TransactionType; // Use imported TransactionType
+    category: string;
+    currency: Currency;
+    transactionDate: Date; // Added transactionDate
+  }) => void;
+  title?: string;
+  description?: string;
+  accountType?: "construction" | "finance"; // Make optional if it can be
 }
 
 export function TransactionDialog({
@@ -40,23 +41,36 @@ export function TransactionDialog({
   onSave,
   title = "Add Transaction",
   description = "Record a new transaction.",
-  accountType,
+  accountType, // Can be undefined if made optional above
 }: TransactionDialogProps) {
   const [formData, setFormData] = useState<{
-    amount: number
-    description: string
-    type: "income" | "expense"
-    category: string
-    currency: Currency
+    amount: number;
+    description: string;
+    type: TransactionType;
+    category: string;
+    currency: Currency;
+    transactionDate: string; // Store as string for date input
   }>({
     amount: 0,
     description: "",
     type: "income",
-    category: accountType === "construction" ? "materials" : "payment",
+    category: accountType === "construction" ? "materials" : accountType === "finance" ? "payment" : "other", // Default category
     currency: "USD",
-  })
+    transactionDate: new Date().toISOString().split("T")[0], // Default to today
+  });
 
-  const handleChange = (field: string, value: string | number | Currency) => {
+  // Update category if accountType changes and dialog is open
+  useEffect(() => {
+    if (open) {
+      setFormData(prev => ({
+        ...prev,
+        category: accountType === "construction" ? "materials" : accountType === "finance" ? "payment" : prev.category || "other",
+      }));
+    }
+  }, [accountType, open]);
+
+
+  const handleChange = (field: string, value: string | number | Currency | TransactionType) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -64,15 +78,35 @@ export function TransactionDialog({
   }
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
-    onOpenChange(false)
-  }
+    e.preventDefault();
+    onSave({
+      ...formData,
+      transactionDate: new Date(formData.transactionDate), // Convert string to Date
+    });
+    onOpenChange(false);
+    // Optionally reset form here if dialog is reused without re-initializing state from parent
+    setFormData({
+        amount: 0,
+        description: "",
+        type: "income",
+        category: accountType === "construction" ? "materials" : accountType === "finance" ? "payment" : "other",
+        currency: "USD",
+        transactionDate: new Date().toISOString().split("T")[0],
+    });
+  };
 
   // Different category options based on account type
-  const constructionCategories = ["materials", "labor", "permits", "equipment", "other"]
-  const financeCategories = ["payment", "refund", "fee", "tax", "other"]
-  const categories = accountType === "construction" ? constructionCategories : financeCategories
+  const constructionCategories = ["materials", "labor", "permits", "equipment", "other_construction_expense", "construction_income"];
+  const financeCategories = ["client_payment", "refund_issued", "bank_fee", "service_fee", "interest_income", "other_finance_expense", "other_finance_income"];
+  const genericCategories = ["utility_bill", "office_supplies", "salary", "miscellaneous_expense", "miscellaneous_income"];
+  
+  let categories: string[] = genericCategories;
+  if (accountType === "construction") {
+    categories = constructionCategories;
+  } else if (accountType === "finance") {
+    categories = financeCategories;
+  }
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -84,12 +118,25 @@ export function TransactionDialog({
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="transactionDate" className="text-right">
+                Date
+              </Label>
+              <Input
+                id="transactionDate"
+                type="date"
+                value={formData.transactionDate}
+                onChange={(e) => handleChange("transactionDate", e.target.value)}
+                className="col-span-3"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="type" className="text-right">
                 Transaction Type
               </Label>
               <Select
                 value={formData.type}
-                onValueChange={(value) => handleChange("type", value as "income" | "expense")}
+                onValueChange={(value) => handleChange("type", value as TransactionType)}
               >
                 <SelectTrigger id="type" className="col-span-3">
                   <SelectValue placeholder="Select type" />

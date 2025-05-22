@@ -40,7 +40,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
+import AdminRouteGuard from '../../../components/auth/AdminRouteGuard'; // Corrected path
 
 export default function ApartmentManagement() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -48,9 +49,10 @@ export default function ApartmentManagement() {
   const [showAddApartmentDialog, setShowAddApartmentDialog] = useState(false)
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-100 md:flex-row">
-      {/* Mobile sidebar toggle */}
-      <Button
+    <AdminRouteGuard>
+      <div className="flex min-h-screen flex-col bg-gray-100 md:flex-row">
+        {/* Mobile sidebar toggle */}
+        <Button
         variant="ghost"
         size="icon"
         className="absolute left-4 top-4 z-50 md:hidden"
@@ -1052,6 +1054,7 @@ export default function ApartmentManagement() {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+      </div>
+    </AdminRouteGuard>
   )
 }

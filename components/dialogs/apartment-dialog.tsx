@@ -14,12 +14,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import type { Apartment, ApartmentStatus } from "@/lib/types"
-import { getAllBuildings } from "@/lib/data"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Apartment, ApartmentStatus, Building } from "@/lib/types"; // Added Building
+// import { getAllBuildings } from "@/lib/data"; // Removed
+import { useBuildings } from "@/lib/hooks/use-buildings"; // Added
 
 interface ApartmentDialogProps {
-  open: boolean
+  open: boolean;
   onOpenChange: (open: boolean) => void
   onSave: (apartment: Omit<Apartment, "id" | "createdAt" | "updatedAt">) => void
   apartment?: Apartment
@@ -54,31 +55,37 @@ export function ApartmentDialog({
   })
 
   // Reset form when dialog opens/closes or apartment changes
-  useEffect(() => {
-    if (open && apartment) {
-      setFormData({
-        buildingId: apartment.buildingId,
-        number: apartment.number,
-        floor: apartment.floor,
-        type: apartment.type,
-        size: apartment.size,
-        price: apartment.price,
-        status: apartment.status,
-      })
-    } else if (open) {
-      setFormData({
-        buildingId: getAllBuildings()[0]?.id || "",
-        number: "",
-        floor: 1,
-        type: "1 Bedroom",
-        size: 0,
-        price: 0,
-        status: "available",
-      })
-    }
-  }, [open, apartment])
+  const { buildings, loading: buildingsLoading, error: buildingsError } = useBuildings();
 
-  const handleChange = (field: string, value: string | number) => {
+  // Reset form when dialog opens/closes or apartment changes
+  useEffect(() => {
+    if (open) {
+      if (apartment) {
+        setFormData({
+          buildingId: apartment.buildingId,
+          number: apartment.number,
+          floor: apartment.floor,
+          type: apartment.type,
+          size: apartment.size,
+          price: apartment.price,
+          status: apartment.status,
+        });
+      } else {
+        // Default for new apartment
+        setFormData({
+          buildingId: buildings && buildings.length > 0 ? buildings[0].id : "", // Default to first building if available
+          number: "",
+          floor: 1,
+          type: "1 Bedroom",
+          size: 0,
+          price: 0,
+          status: "available",
+        });
+      }
+    }
+  }, [open, apartment, buildings]); // Added buildings to dependency array
+
+  const handleChange = (field: string, value: string | number | ApartmentStatus) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
@@ -86,14 +93,17 @@ export function ApartmentDialog({
   }
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
     onSave({
       ...formData,
-    })
-    onOpenChange(false)
-  }
+      floor: Number(formData.floor), // Ensure floor, size, price are numbers
+      size: Number(formData.size),
+      price: Number(formData.price),
+    });
+    onOpenChange(false);
+  };
 
-  const buildings = getAllBuildings()
+  // const buildings = getAllBuildings(); // Replaced by useBuildings hook
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -108,16 +118,22 @@ export function ApartmentDialog({
               <Label htmlFor="buildingId" className="text-right">
                 Building
               </Label>
-              <Select value={formData.buildingId} onValueChange={(value) => handleChange("buildingId", value)}>
+              <Select 
+                value={formData.buildingId} 
+                onValueChange={(value) => handleChange("buildingId", value)}
+                disabled={buildingsLoading}
+              >
                 <SelectTrigger id="buildingId" className="col-span-3">
-                  <SelectValue placeholder="Select building" />
+                  <SelectValue placeholder={buildingsLoading ? "Loading buildings..." : "Select building"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {buildings.map((building) => (
+                  {buildingsError && <SelectItem value="error" disabled>Error: {buildingsError}</SelectItem>}
+                  {!buildingsLoading && !buildingsError && buildings.map((building: Building) => (
                     <SelectItem key={building.id} value={building.id}>
                       {building.name}
                     </SelectItem>
                   ))}
+                  {!buildingsLoading && !buildingsError && buildings.length === 0 && <SelectItem value="nobuildings" disabled>No buildings found</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
