@@ -25,11 +25,15 @@ import { AdBannerCarousel } from "@/components/ad-banner";
 // Icons
 import {
   LayoutDashboard, Building, CreditCard, MessageSquare, Settings, LogOut, Menu, X, ExternalLink,
-  Home, DollarSign, CalendarDays, Bell, AlertCircle, Loader2, Edit, Info, ShieldCheck, FileText
+  Home, DollarSign, CalendarDays, Bell, AlertCircle, Loader2, Edit, Info, ShieldCheck, FileText, Users
 } from "lucide-react";
 
 // Helpers
 import { formatCurrency } from "@/lib/data"; // Assuming this utility exists
+import ClientRouteGuard from "@/components/auth/ClientRouteGuard"; // Import the guard
+
+// Define DEFAULT_CURRENCY, similar to AdminDashboard
+const DEFAULT_CURRENCY: Currency = "USD";
 
 export default function ClientDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -96,10 +100,11 @@ export default function ClientDashboard() {
   const displayName = clientProfile?.name || currentUser?.email || "Client";
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-100 md:flex-row">
-      <Button variant="ghost" size="icon" className="absolute left-4 top-4 z-50 md:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
-        {sidebarOpen ? <X /> : <Menu />}
-      </Button>
+    <ClientRouteGuard>
+      <div className="flex min-h-screen flex-col bg-gray-100 md:flex-row">
+        <Button variant="ghost" size="icon" className="absolute left-4 top-4 z-50 md:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          {sidebarOpen ? <X /> : <Menu />}
+        </Button>
       <aside className={`fixed inset-y-0 left-0 z-40 w-64 transform bg-green-800 p-4 text-white transition-transform duration-200 ease-in-out md:relative md:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:block`}>
         <div className="flex h-full flex-col">
           <div className="mb-8 flex items-center gap-2 px-2"><Image src="/placeholder.svg?height=40&width=40" alt="Logo" width={40} height={40} className="rounded-md bg-white p-1"/><span className="text-xl font-bold">ApartmentPro</span></div>
@@ -232,5 +237,6 @@ export default function ClientDashboard() {
         </Tabs>
       </main>
     </div>
+    </ClientRouteGuard>
   );
 }

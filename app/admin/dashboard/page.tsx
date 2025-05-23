@@ -35,7 +35,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 // Icons
 import {
-  BarChart3, Building, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, Settings, Users, X, Eye, Edit, Trash2, Phone, Plus, DollarSign, TrendingUp, TrendingDown, ListFilter, Repeat, Loader2, AlertTriangle, Briefcase, CalendarDays, ListChecks
+  BarChart3, Building, CreditCard, LayoutDashboard, LogOut, Menu, MessageSquare, Settings, Users, X, Eye, Edit, Trash2, Phone, Plus, DollarSign, TrendingUp, TrendingDown, ListFilter, Repeat, Loader2, AlertTriangle, Briefcase, CalendarDays, ListChecks, PlusCircle, Edit2
 } from "lucide-react";
 
 // Helpers (formatCurrency, systemSettings might still be used from here)
@@ -144,24 +144,28 @@ export default function AdminDashboard() {
   const handleEditClient = async (data: Omit<Client, "id"| "createdAt"| "updatedAt">) => { if (selectedClientId) try { await updateClient(selectedClientId, data as Partial<Client>); } catch (e) { console.error(e); alert("Error.");}};
   const handleDeleteClient = async () => { if (selectedClientId) try { await removeClient(selectedClientId); setSelectedClientId(null); } catch (e) { console.error(e); alert("Error.");}};
 
-  const handleAddApartment = async (data: Omit<Apartment, "id"| "createdAt"| "updatedAt">) => { try { await createApartment(data); } catch (e) { console.error(e); alert("Error adding apartment.");}};
-  const handleEditApartment = async (data: Omit<Apartment, "id"| "createdAt"| "updatedAt">) => { 
+  const handleAddApartment = async (data: Omit<Apartment, "id"| "createdAt"| "updatedAt">) => { try { await createApartment(data); } catch (e) { console.error("Error adding apartment:", e); alert("Error adding apartment.");}};
+  const handleEditApartment = async (data: Omit<Apartment, "id"| "createdAt"| "updatedAt">) => {
     if (selectedApartmentId) {
-      const { id, createdAt, updatedAt, ...updateData } = data as Apartment; 
-      try { await updateApartment(selectedApartmentId, updateData); } catch (e) { console.error(e); alert("Error editing apartment.");}
+      try {
+        await updateApartment(selectedApartmentId, data);
+      } catch (e) {
+        console.error("Error editing apartment:", e);
+        alert("Error editing apartment.");
+      }
     }
   };
-  const handleDeleteApartment = async () => { if (selectedApartmentId) try { await deleteApartment(selectedApartmentId); setSelectedApartmentId(null); } catch (e) { console.error(e); alert("Error deleting apartment.");}};
+  const handleDeleteApartment = async () => { if (selectedApartmentId) try { await deleteApartment(selectedApartmentId); setSelectedApartmentId(null); } catch (e) { console.error("Error deleting apartment:", e); alert("Error deleting apartment.");}};
   
   const handleAddPayment = async (data: Omit<Payment, "id"| "createdAt"| "updatedAt">) => {
-    try { const newP = await createPaymentDoc(data); if (newP && newP.status === "paid") { await addFinancialTransaction({ accountId: CLIENT_FINANCE_ACCOUNT_ID, type: "income", category: "client_payment", description: `Payment for Apt ${newP.apartmentId}`, amount: newP.amount, currency: newP.currency, transactionDate: newP.paidDate||new Date(), relatedPaymentId: newP.id });}} catch (e) { console.error(e); alert("Error.");}
+    try { const newP = await createPaymentDoc(data); if (newP && newP.status === "paid") { await addFinancialTransaction({ accountId: CLIENT_FINANCE_ACCOUNT_ID, type: "income", category: "client_payment", description: `Payment for Apt ${newP.apartmentId}`, amount: newP.amount, currency: newP.currency, transactionDate: newP.paidDate||new Date(), relatedPaymentId: newP.id });}} catch (e) { console.error("Error adding payment:", e); alert("Error adding payment.");}
   };
   const handleMarkPaymentPaid = async (p: Payment) => {
-    if (p.status!=="paid") try { await updatePaymentDoc(p.id, {status:"paid", paidDate:new Date()}); await addFinancialTransaction({accountId:CLIENT_FINANCE_ACCOUNT_ID, type:"income", category:"client_payment", description:`Payment ID: ${p.id}`, amount:p.amount, currency:p.currency, transactionDate:new Date(), relatedPaymentId:p.id});} catch(e){console.error(e);alert("Error.")}
+    if (p.status!=="paid") try { await updatePaymentDoc(p.id, {status:"paid", paidDate:new Date()}); await addFinancialTransaction({accountId:CLIENT_FINANCE_ACCOUNT_ID, type:"income", category:"client_payment", description:`Payment ID: ${p.id}`, amount:p.amount, currency:p.currency, transactionDate:new Date(), relatedPaymentId:p.id});} catch(e){console.error("Error marking payment paid:", e);alert("Error marking payment paid.")}
   };
-  const handleDeletePayment = async (id: string) => { if(confirm("Delete payment? This may affect financial records.")) try {await deletePaymentDoc(id);}catch(e){console.error(e);alert("Error.")}};
+  const handleDeletePayment = async (id: string) => { if(confirm("Delete payment? This may affect financial records.")) try {await deletePaymentDoc(id);}catch(e){console.error("Error deleting payment:", e);alert("Error deleting payment.")}};
 
-  const handleAddGenericTransaction = async (data: any) => { try {await addFinancialTransaction(data);}catch(e){console.error(e);alert("Error.")}};
+  const handleAddGenericTransaction = async (data: any) => { try {await addFinancialTransaction(data);}catch(e){console.error("Error adding generic transaction:", e);alert("Error adding generic transaction.")}};
   
   const constructionMainAccount = accounts.find(acc => acc.type === 'construction' && acc.currency === 'USD'); 
   const clientFinanceMainAccount = accounts.find(acc => acc.type === 'client_finance' && acc.currency === 'USD');

@@ -49,12 +49,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setCurrentUserData(formattedUserData);
             setCurrentUserRole(formattedUserData.role);
             console.log("User metadata loaded:", formattedUserData);
+
+            // NOW attempt redirection if on a login page
+            if (pathname === "/admin/login" || pathname === "/client/login") {
+                if (formattedUserData.role === 'admin' && pathname === "/admin/login") {
+                    router.push("/admin/dashboard");
+                } else if (formattedUserData.role === 'client' && pathname === "/client/login") { // Assuming 'client' role
+                    router.push("/client/dashboard");
+                } else {
+                    // Role doesn't match the login page they are on, or no role.
+                    // Decide behavior: logout, error message, or redirect to a generic page.
+                    // For now, just log it. The route guard should ideally handle this too.
+                    console.warn(`User role ${formattedUserData.role} does not match login page ${pathname}.`);
+                }
+            }
+            setLoading(false); // Auth and user data fetch attempt complete
           } else {
             console.warn(`User metadata not found in Firestore for UID: ${user.uid}`);
             setCurrentUserData(null);
             setCurrentUserRole(null);
+            // User exists in Firebase Auth but not Firestore. Critical issue.
+            // Redirect to login, show error, or sign out.
+            // For now, just set loading false. The route guard will likely send to login.
+            setLoading(false);
           }
-          setLoading(false); // Auth and user data fetch attempt complete
         }, (error) => {
           console.error("Error fetching user metadata from Firestore:", error);
           setCurrentUserData(null);
@@ -62,14 +80,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setLoading(false); // Fetch attempt complete even on error
         });
 
-        // Redirection logic (can be kept or adjusted)
-        if (pathname === "/admin/login" || pathname === "/client/login") {
-          if (pathname.startsWith("/admin")) {
-            router.push("/admin/dashboard");
-          } else {
-            router.push("/client/dashboard");
-          }
-        }
       } else {
         // User is logged out
         if (unsubscribeFirestore) unsubscribeFirestore();

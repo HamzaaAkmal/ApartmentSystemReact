@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea";
-import { CurrencySelector } from "@/components/ui/currency-selector"; // Assuming path, adjust if needed
+import { CurrencySelector } from "@/components/currency-selector"; // Assuming path, adjust if needed
 import type { Payment, PaymentStatus, PaymentMethod, Currency, Client, Apartment } from "@/lib/types";
 // Remove getAllClients, import useClientCrud (actual useCrud for Firestore clients)
 import { useCrud as useClientCrud } from "@/lib/hooks/use-crud"; 
