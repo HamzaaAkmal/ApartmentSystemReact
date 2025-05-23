@@ -35,7 +35,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (unsubscribeFirestore) unsubscribeFirestore(); // Unsubscribe from previous listener
 
         const userDocRef = doc(firestore, 'users', user.uid);
+        
+        // --- BEGIN TIMEOUT ADDITION ---
+        let firestoreCallbackExecuted = false;
+        const firestoreTimeout = setTimeout(() => {
+          if (!firestoreCallbackExecuted) {
+            console.error(`Firestore data fetch for UID ${user.uid} timed out after 10 seconds.`);
+            // Unsubscribe to prevent late execution if it eventually comes back
+            if (unsubscribeFirestore) {
+                console.log("AuthContext: Unsubscribing from Firestore due to timeout.");
+                unsubscribeFirestore();
+                unsubscribeFirestore = undefined; // Important to prevent calling it again in cleanup
+            }
+            setCurrentUserData(null); 
+            setCurrentUserRole(null);
+            setLoading(false); // Crucial: ensure loading state is updated
+            // Optionally, redirect to login with an error or show a global error message
+            // Example: router.push('/admin/login?error=profile_timeout');
+          }
+        }, 10000); // 10-second timeout
+        // --- END TIMEOUT ADDITION ---
+
+        console.log("AuthContext: Attaching Firestore onSnapshot listener for UID:", user.uid); // Added for debugging
         unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
+          // --- BEGIN TIMEOUT MODIFICATION ---
+          if (firestoreCallbackExecuted) return; // Prevent execution if timeout already handled it
+          firestoreCallbackExecuted = true;
+          clearTimeout(firestoreTimeout);
+          // --- END TIMEOUT MODIFICATION ---
+          console.log("AuthContext: Firestore onSnapshot data callback received."); // Added for debugging
+
           if (docSnap.exists()) {
             const appUserData = docSnap.data() as AppUser;
             // Convert Firestore Timestamps to JS Dates if necessary
@@ -74,7 +103,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setLoading(false);
           }
         }, (error) => {
-          console.error("Error fetching user metadata from Firestore:", error);
+          // --- BEGIN TIMEOUT MODIFICATION ---
+          if (firestoreCallbackExecuted) return; // Prevent execution if timeout already handled it
+          firestoreCallbackExecuted = true;
+          clearTimeout(firestoreTimeout);
+          // --- END TIMEOUT MODIFICATION ---
+          console.error("AuthContext: Firestore onSnapshot error callback received:", error); // Added for debugging
+          
           setCurrentUserData(null);
           setCurrentUserRole(null);
           setLoading(false); // Fetch attempt complete even on error
