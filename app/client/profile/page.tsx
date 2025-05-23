@@ -42,7 +42,7 @@ export default function ClientProfilePage() {
 
   useEffect(() => {
     if (!authLoading && !currentUser) {
-      router.push("/client/login");
+      router.push("/admin/dashboard"); // Changed from /client/login
     }
   }, [currentUser, authLoading, router]);
 

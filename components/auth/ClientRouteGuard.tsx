@@ -18,20 +18,20 @@ export default function ClientRouteGuard({ children }: ClientRouteGuardProps) {
     if (!loading) {
       if (!currentUser) {
         // No Firebase user, not authenticated
-        console.log("ClientRouteGuard: No current user, redirecting to login.");
-        router.push('/client/login');
+        console.log("ClientRouteGuard: No current user, redirecting to admin dashboard (was /client/login).");
+        router.push('/admin/dashboard');
       } else {
         // Firebase user exists, now check role based on currentUserData
         if (!currentUserData) {
           // User exists in Auth, but no data in Firestore.
-          console.error("ClientRouteGuard: User authenticated but no user data found in Firestore. Redirecting to login.");
+          console.error("ClientRouteGuard: User authenticated but no user data found in Firestore. Redirecting to admin dashboard (was /client/login).");
           // Potentially logout the user here if this state is considered invalid.
           // logout(); // from useAuth() if needed and added to AuthContext
-          router.push('/client/login');
+          router.push('/admin/dashboard');
         } else if (currentUserRole !== 'client') {
           // User is authenticated, data loaded, but not a client
-          console.log(`ClientRouteGuard: User role "${currentUserRole}" is not client, redirecting to login.`);
-          router.push('/client/login'); // Or a dedicated '/unauthorized' page
+          console.log(`ClientRouteGuard: User role "${currentUserRole}" is not client, redirecting to admin dashboard (was /client/login).`);
+          router.push('/admin/dashboard'); // Or a dedicated '/unauthorized' page
         }
         // If role is 'client', execution continues and children are rendered
       }

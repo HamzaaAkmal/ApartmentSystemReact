@@ -49,11 +49,11 @@ export default function ClientDashboard() {
   // Redirect to login if not authenticated or if role is admin (clients should not access admin dashboard via client login)
   useEffect(() => {
     if (!authLoading && !currentUser) {
-      router.push("/client/login");
+      router.push("/admin/dashboard"); // Changed from /client/login
     }
     // if (!authLoading && currentUser && currentUserRole === 'admin' && window.location.pathname.startsWith('/client')) {
     //   logout(); // Log out admin if they somehow land on client page
-    //   router.push("/client/login"); // or a generic landing page
+    //   router.push("/admin/dashboard"); // Changed from /client/login (or a generic landing page)
     // }
   }, [currentUser, authLoading, currentUserRole, router, logout]);
 

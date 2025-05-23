@@ -25,24 +25,24 @@ export default function AdminRouteGuard({ children }: AdminRouteGuardProps) {
     if (!loading) {
       if (!currentUser) {
         // No Firebase user, not authenticated
-        console.log("AdminRouteGuard: No current user, redirecting to login.");
-        router.push('/admin/login');
+        console.log("AdminRouteGuard: No current user, redirecting to admin dashboard (was login).");
+        router.push('/admin/dashboard');
       } else {
         // Firebase user exists, now check role based on currentUserData
         if (!currentUserData) {
           // This means user exists in Auth, but no data in Firestore (or still loading if logic is complex)
           // This case should ideally be handled by AuthContext setting loading to false only after data attempt.
           // If it reaches here, it means something is wrong with user record in DB.
-          console.error("AdminRouteGuard: User authenticated but no user data found in Firestore. Redirecting to login.");
+          console.error("AdminRouteGuard: User authenticated but no user data found in Firestore. Redirecting to admin dashboard (was login).");
           // Potentially logout the user here if this state is considered invalid.
           // logout(); // from useAuth() if added to its return
-          router.push('/admin/login');
+          router.push('/admin/dashboard');
         } else if (currentUserRole !== 'admin') {
           // User is authenticated, data loaded, but not an admin
-          console.log(`AdminRouteGuard: User role "${currentUserRole}" is not admin, redirecting to login.`);
+          console.log(`AdminRouteGuard: User role "${currentUserRole}" is not admin, redirecting to admin dashboard (was login).`);
           // Redirect to login or an "unauthorized" page.
           // Pushing to dashboard if not admin seems wrong.
-          router.push('/admin/login'); // Or a dedicated '/unauthorized' page
+          router.push('/admin/dashboard'); // Or a dedicated '/unauthorized' page
         }
         // If role is 'admin', execution continues and children are rendered
       }
@@ -66,7 +66,7 @@ export default function AdminRouteGuard({ children }: AdminRouteGuardProps) {
       // This case should ideally be covered by redirects in useEffect.
       // If it reaches here, it's a fallback, perhaps show a minimal unauthorized message or redirect again.
       // For robustness, you might want to ensure redirection happens or show an explicit "Access Denied".
-      // router.push('/admin/login'); // Could cause loop if useEffect logic is not perfect.
+      // router.push('/admin/dashboard'); // Could cause loop if useEffect logic is not perfect.
       return (
           <div className="flex items-center justify-center min-h-screen">
             <p className="text-lg text-red-600">Access Denied or session loading...</p>
