@@ -10,15 +10,18 @@ interface AdminRouteGuardProps {
 }
 
 export default function AdminRouteGuard({ children }: AdminRouteGuardProps) {
-  const { currentUser, currentUserRole, loading } = useAuth();
-  const router = useRouter();
-
-  const { currentUser, currentUserData, currentUserRole, loading } /*logout*/ = useAuth(); // Added currentUserData, consider adding logout if needed
+  // When AuthContext is mocked for admin:
+  // - currentUser will be a mock user object.
+  // - currentUserData will be a mock data object with role: 'admin'.
+  // - currentUserRole will be 'admin'.
+  // - loading will be false.
+  // The existing logic correctly handles this and grants access.
+  const { currentUser, currentUserData, currentUserRole, loading } /*logout*/ = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     // Only run logic if auth loading is complete.
-    // `loading` from useAuth() indicates that onAuthStateChanged and the initial Firestore fetch attempt have finished.
+    // With mocked AuthContext, `loading` is initially false.
     if (!loading) {
       if (!currentUser) {
         // No Firebase user, not authenticated

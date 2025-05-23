@@ -21,137 +21,74 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUser, setCurrentUser] = useState<FirebaseAuthUser | null>(null);
   const [currentUserData, setCurrentUserData] = useState<AppUser | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole | null>(null);
-  const [loading, setLoading] = useState(true); // True until auth state and user data are resolved
-  const router = useRouter();
-  const pathname = usePathname();
+  const [loading, setLoading] = useState(false); // Set loading to false initially for mock
+  const router = useRouter(); // Keep for potential internal navigation if needed
+  const pathname = usePathname(); // Keep for potential internal logic if needed
 
+  // Simulate a logged-in admin user
   useEffect(() => {
-    let unsubscribeFirestore: (() => void) | undefined;
+    console.log("AuthContext: Setting mock admin user.");
+    // Mock Firebase user object
+    const mockFbUser: FirebaseAuthUser = {
+      uid: 'mockAdminUser123',
+      email: 'admin@example.mock.com',
+      displayName: 'Mock Admin User',
+      photoURL: null,
+      emailVerified: true,
+      isAnonymous: false,
+      metadata: {}, // Empty or mock metadata
+      providerData: [], // Empty or mock provider data
+      // Add other required fields for FirebaseAuthUser with appropriate mock values
+      // May need to check type definition for all required fields
+      // For example:
+      refreshToken: 'mockRefreshToken',
+      tenantId: null,
+      delete: async () => { console.log('delete called') },
+      getIdToken: async () => 'mockIdToken',
+      getIdTokenResult: async () => ({ token: 'mockIdToken', claims: {}, authTime: '', expirationTime: '', issuedAtTime: '', signInProvider: null, signInSecondFactor: null }),
+      reload: async () => { console.log('reload called') },
+      toJSON: () => ({ uid: 'mockAdminUser123', email: 'admin@example.mock.com' }), // simplified
+    } as FirebaseAuthUser; // Type assertion
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      if (user) {
-        // User is logged in, fetch/listen to Firestore data
-        if (unsubscribeFirestore) unsubscribeFirestore(); // Unsubscribe from previous listener
-
-        const userDocRef = doc(firestore, 'users', user.uid);
-        
-        // --- BEGIN TIMEOUT ADDITION ---
-        let firestoreCallbackExecuted = false;
-        const firestoreTimeout = setTimeout(() => {
-          if (!firestoreCallbackExecuted) {
-            console.error(`Firestore data fetch for UID ${user.uid} timed out after 10 seconds.`);
-            // Unsubscribe to prevent late execution if it eventually comes back
-            if (unsubscribeFirestore) {
-                console.log("AuthContext: Unsubscribing from Firestore due to timeout.");
-                unsubscribeFirestore();
-                unsubscribeFirestore = undefined; // Important to prevent calling it again in cleanup
-            }
-            setCurrentUserData(null); 
-            setCurrentUserRole(null);
-            setLoading(false); // Crucial: ensure loading state is updated
-            // Optionally, redirect to login with an error or show a global error message
-            // Example: router.push('/admin/login?error=profile_timeout');
-          }
-        }, 10000); // 10-second timeout
-        // --- END TIMEOUT ADDITION ---
-
-        console.log("AuthContext: Attaching Firestore onSnapshot listener for UID:", user.uid); // Added for debugging
-        unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
-          // --- BEGIN TIMEOUT MODIFICATION ---
-          if (firestoreCallbackExecuted) return; // Prevent execution if timeout already handled it
-          firestoreCallbackExecuted = true;
-          clearTimeout(firestoreTimeout);
-          // --- END TIMEOUT MODIFICATION ---
-          console.log("AuthContext: Firestore onSnapshot data callback received."); // Added for debugging
-
-          if (docSnap.exists()) {
-            const appUserData = docSnap.data() as AppUser;
-            // Convert Firestore Timestamps to JS Dates if necessary
-            const formattedUserData: AppUser = {
-              ...appUserData,
-              id: docSnap.id, // Ensure id is set from snapshot
-              createdAt: appUserData.createdAt instanceof Timestamp ? appUserData.createdAt.toDate() : appUserData.createdAt,
-              updatedAt: appUserData.updatedAt instanceof Timestamp ? appUserData.updatedAt.toDate() : appUserData.updatedAt,
-              lastLogin: appUserData.lastLogin instanceof Timestamp ? appUserData.lastLogin.toDate() : appUserData.lastLogin,
-            };
-            setCurrentUserData(formattedUserData);
-            setCurrentUserRole(formattedUserData.role);
-            console.log("User metadata loaded:", formattedUserData);
-
-            // NOW attempt redirection if on a login page
-            if (pathname === "/admin/login" || pathname === "/client/login") {
-                if (formattedUserData.role === 'admin' && pathname === "/admin/login") {
-                    router.push("/admin/dashboard");
-                } else if (formattedUserData.role === 'client' && pathname === "/client/login") { // Assuming 'client' role
-                    router.push("/client/dashboard");
-                } else {
-                    // Role doesn't match the login page they are on, or no role.
-                    // Decide behavior: logout, error message, or redirect to a generic page.
-                    // For now, just log it. The route guard should ideally handle this too.
-                    console.warn(`User role ${formattedUserData.role} does not match login page ${pathname}.`);
-                }
-            }
-            setLoading(false); // Auth and user data fetch attempt complete
-          } else {
-            console.warn(`User metadata not found in Firestore for UID: ${user.uid}`);
-            setCurrentUserData(null);
-            setCurrentUserRole(null);
-            // User exists in Firebase Auth but not Firestore. Critical issue.
-            // Redirect to login, show error, or sign out.
-            // For now, just set loading false. The route guard will likely send to login.
-            setLoading(false);
-          }
-        }, (error) => {
-          // --- BEGIN TIMEOUT MODIFICATION ---
-          if (firestoreCallbackExecuted) return; // Prevent execution if timeout already handled it
-          firestoreCallbackExecuted = true;
-          clearTimeout(firestoreTimeout);
-          // --- END TIMEOUT MODIFICATION ---
-          console.error("AuthContext: Firestore onSnapshot error callback received:", error); // Added for debugging
-          
-          setCurrentUserData(null);
-          setCurrentUserRole(null);
-          setLoading(false); // Fetch attempt complete even on error
-        });
-
-      } else {
-        // User is logged out
-        if (unsubscribeFirestore) unsubscribeFirestore();
-        setCurrentUserData(null);
-        setCurrentUserRole(null);
-        setLoading(false); // Auth state resolved
-
-        // Redirection logic for logged-out users
-        if (pathname.startsWith("/admin/dashboard")) {
-          router.push("/admin/login");
-        } else if (pathname.startsWith("/client/dashboard")) {
-          router.push("/client/login");
-        }
-      }
-    });
-
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeFirestore) unsubscribeFirestore();
+    // Mock Firestore user data object
+    const mockAdminData: AppUser = {
+      id: 'mockAdminUser123', // Should match UID
+      role: 'admin',
+      name: 'Mock Admin',
+      email: 'admin@example.mock.com',
+      // Add other fields from AppUser type with mock values
+      // For example:
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      status: 'active', 
+      // ... any other fields your AppUser type might have
     };
-  }, [router, pathname]); // router and pathname for redirection logic
 
+    setCurrentUser(mockFbUser);
+    setCurrentUserData(mockAdminData);
+    setCurrentUserRole('admin');
+    setLoading(false); // Ensure loading is false
+
+    // No redirection logic needed here as we assume user is already on a protected route or navigating there.
+    // The route guards will handle access based on these mock values.
+
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+  // Dummy logout function that does nothing or logs, to prevent clearing mock state
   const logout = async () => {
-    if (unsubscribeFirestore) unsubscribeFirestore(); // Clean up Firestore listener on logout
-    await firebaseSignOut(auth);
-    setCurrentUser(null); // Handled by onAuthStateChanged, but good for immediate UI update
-    setCurrentUserData(null);
-    setCurrentUserRole(null);
-    // Determine where to redirect after logout based on current path
-    if (pathname.startsWith("/admin")) {
-      router.push("/admin/login");
-    } else if (pathname.startsWith("/client")) {
-      router.push("/client/login");
-    } else {
-      router.push("/"); // Default redirect for other pages or if path is unclear
-    }
+    console.log("AuthContext: Logout called, but authentication is mocked. No state change.");
+    // To simulate logout page redirection for testing UI flow:
+    // if (pathname.startsWith("/admin")) {
+    //   router.push("/admin/login");
+    // } else if (pathname.startsWith("/client")) {
+    //   router.push("/client/login");
+    // } else {
+    //   router.push("/");
+    // }
   };
+
+  // If other functions like login/signup exist, they should also be dummied out.
+  // Based on previous file content, only onAuthStateChanged (now bypassed) and logout were prominent.
 
   return (
     <AuthContext.Provider value={{ currentUser, currentUserData, currentUserRole, loading, logout }}>
